@@ -214,6 +214,11 @@ public:
             {
                 auto &src = tmpOusterCloudIn->points[i];
                 auto &dst = laserCloudIn->points[i];
+                if (!pcl_isfinite(tmpOusterCloudIn->points[i].x) ||
+                    !pcl_isfinite(tmpOusterCloudIn->points[i].y) ||
+                    !pcl_isfinite(tmpOusterCloudIn->points[i].z)) {
+                  continue;
+                }
                 dst.x = src.x;
                 dst.y = src.y;
                 dst.z = src.z;
@@ -227,12 +232,14 @@ public:
             ROS_ERROR_STREAM("Unknown sensor type: " << int(sensor));
             ros::shutdown();
         }
-
+        laserCloudIn->is_dense = true;
         // get timestamp
         cloudHeader = currentCloudMsg.header;
         timeScanCur = cloudHeader.stamp.toSec();
         timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
 
+        std::vector<int> index; 
+       // pcl::removeNaNFromPointCloud(*laserCloudIn,laserCloudIn,index);
         // check dense flag
         if (laserCloudIn->is_dense == false)
         {
@@ -261,6 +268,7 @@ public:
         }
 
         // check point time
+        deskewFlag = 1;
         if (deskewFlag == 0)
         {
             deskewFlag = -1;
