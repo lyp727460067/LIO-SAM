@@ -20,7 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   visualization_msgs
 )
-
+find_package(Eigen3 REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(PCL REQUIRED QUIET)
 find_package(OpenCV REQUIRED QUIET)
@@ -85,6 +85,14 @@ link_directories(
 add_executable(${PROJECT_NAME}_imageProjection src/imageProjection.cpp)
 add_dependencies(${PROJECT_NAME}_imageProjection ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 target_link_libraries(${PROJECT_NAME}_imageProjection ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
+
+
+
+add_executable(${PROJECT_NAME}imu_init src/imu_init.cpp)
+add_dependencies(${PROJECT_NAME}imu_init ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+target_link_libraries(${PROJECT_NAME}imu_init ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES}    ${EIGEN3_LIBS})
+
+
 
 # Feature Association
 add_executable(${PROJECT_NAME}_featureExtraction src/featureExtraction.cpp)
