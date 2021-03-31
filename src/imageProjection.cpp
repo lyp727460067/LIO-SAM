@@ -6,12 +6,12 @@ struct VelodynePointXYZIRT
     PCL_ADD_POINT4D
     uint8_t intensity;
     uint8_t ring;
-    double timestamp;
+    double time;
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 } EIGEN_ALIGN16;
 POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
     (float, x, x) (float, y, y) (float, z, z)(uint8_t, intensity, intensity)
-    (uint8_t, ring, ring)(double, timestamp, timestamp)
+    (uint8_t, ring, ring)(double, time, time)
 
 )
 struct OusterPointXYZIRT {
@@ -228,7 +228,7 @@ public:
                 dst.z = src.z;
                 dst.intensity = src.intensity;
                 dst.ring = src.ring;
-                dst.timestamp = src.t * 1e-9f;
+                dst.time = src.t * 1e-9f;
                 std::cout<<src.t<<std::endl;
             }
         }
@@ -246,20 +246,20 @@ public:
 
         auto it1 = std::find_if(
             laserCloudIn->points.begin(), laserCloudIn->points.end(),
-            [](const VelodynePointXYZIRT point) { return point.timestamp != 0; });
+            [](const VelodynePointXYZIRT point) { return point.time != 0; });
         if(it1!=laserCloudIn->points.end()){
             int index  =  std::distance(laserCloudIn->points.begin(),it1);
-            timeScanCur =  laserCloudIn->points[index].timestamp*1e-9;
+            timeScanCur =  laserCloudIn->points[index].time*1e-9;
         }
         cloudHeader.stamp = ros::Time().fromSec(timeScanCur);
         auto it = std::find_if(
             laserCloudIn->points.rbegin(), laserCloudIn->points.rend(),
-            [](const VelodynePointXYZIRT point) { return point.timestamp != 0; });
+            [](const VelodynePointXYZIRT point) { return point.time != 0; });
 
 
         if(it!=laserCloudIn->points.rend()){
             int index  =  std::distance(it,laserCloudIn->points.rend());
-            timeScanEnd =  laserCloudIn->points[index-1].timestamp*1e-9;
+            timeScanEnd =  laserCloudIn->points[index-1].time*1e-9;
         }
         std::cout<<timeScanCur<<std::endl;
         std::cout<<"timeScanEnd"<<timeScanEnd<<std::endl;
@@ -583,8 +583,8 @@ public:
 
             if (rangeMat.at<float>(rowIdn, columnIdn) != FLT_MAX)
                 continue;
-            if (laserCloudIn->points[i].timestamp) {
-              thisPoint = deskewPoint(&thisPoint, laserCloudIn->points[i].timestamp);
+            if (laserCloudIn->points[i].time) {
+              thisPoint = deskewPoint(&thisPoint, laserCloudIn->points[i].time);
 
               rangeMat.at<float>(rowIdn, columnIdn) = range;
 
