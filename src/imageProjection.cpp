@@ -4,16 +4,16 @@
 struct VelodynePointXYZIRT
 {
     PCL_ADD_POINT4D
-    PCL_ADD_INTENSITY;
-    uint16_t ring;
-    float time;
+    uint8_t intensity;
+    uint8_t ring;
+    double timestamp;
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 } EIGEN_ALIGN16;
 POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
-    (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
-    (uint16_t, ring, ring) (float, time, time)
-)
+    (float, x, x) (float, y, y) (float, z, z)(uint8_t, intensity, intensity)
+    (uint8_t, ring, ring)(double, timestamp, timestamp)
 
+)
 struct OusterPointXYZIRT {
     PCL_ADD_POINT4D;
     float intensity;
@@ -166,7 +166,6 @@ public:
         // cout << "IMU roll pitch yaw: " << endl;
         // cout << "roll: " << imuRoll << ", pitch: " << imuPitch << ", yaw: " << imuYaw << endl << endl;
     }
-
     void odometryHandler(const nav_msgs::Odometry::ConstPtr& odometryMsg)
     {
         std::lock_guard<std::mutex> lock2(odoLock);
@@ -202,7 +201,12 @@ public:
         cloudQueue.pop_front();
         if (sensor == SensorType::VELODYNE)
         {
-            pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
+
+            pcl::fromROSMsg(currentCloudMsg, *laserCloudIn);
+            //  for(int i = 0;i< laserCloudIn->size();i++){
+            //     std::cout<< (double)laserCloudIn->points[i].time <<std::endl;   
+
+            //  }
         }
         else if (sensor == SensorType::OUSTER)
         {
@@ -224,7 +228,8 @@ public:
                 dst.z = src.z;
                 dst.intensity = src.intensity;
                 dst.ring = src.ring;
-                dst.time = src.t * 1e-9f;
+                dst.timestamp = src.t * 1e-9f;
+                std::cout<<src.t<<std::endl;
             }
         }
         else
@@ -235,9 +240,29 @@ public:
         laserCloudIn->is_dense = true;
         // get timestamp
         cloudHeader = currentCloudMsg.header;
-        timeScanCur = cloudHeader.stamp.toSec();
-        timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
 
+        timeScanCur = cloudHeader.stamp.toSec();
+        std::cout<<setprecision(18);
+
+        auto it1 = std::find_if(
+            laserCloudIn->points.begin(), laserCloudIn->points.end(),
+            [](const VelodynePointXYZIRT point) { return point.timestamp != 0; });
+        if(it1!=laserCloudIn->points.end()){
+            int index  =  std::distance(laserCloudIn->points.begin(),it1);
+            timeScanCur =  laserCloudIn->points[index].timestamp*1e-9;
+        }
+        cloudHeader.stamp = ros::Time().fromSec(timeScanCur);
+        auto it = std::find_if(
+            laserCloudIn->points.rbegin(), laserCloudIn->points.rend(),
+            [](const VelodynePointXYZIRT point) { return point.timestamp != 0; });
+
+
+        if(it!=laserCloudIn->points.rend()){
+            int index  =  std::distance(it,laserCloudIn->points.rend());
+            timeScanEnd =  laserCloudIn->points[index-1].timestamp*1e-9;
+        }
+        std::cout<<timeScanCur<<std::endl;
+        std::cout<<"timeScanEnd"<<timeScanEnd<<std::endl;
         std::vector<int> index; 
        // pcl::removeNaNFromPointCloud(*laserCloudIn,laserCloudIn,index);
         // check dense flag
@@ -268,13 +293,13 @@ public:
         }
 
         // check point time
-        deskewFlag = 1;
+        //deskewFlag = 1;
         if (deskewFlag == 0)
         {
             deskewFlag = -1;
             for (auto &field : currentCloudMsg.fields)
             {
-                if (field.name == "time" || field.name == "t")
+                if (field.name == "time" || field.name == "t" ||field.name == "timestamp")
                 {
                     deskewFlag = 1;
                     break;
@@ -371,7 +396,7 @@ public:
 
         while (!odomQueue.empty())
         {
-            if (odomQueue.front().header.stamp.toSec() < timeScanCur - 0.01)
+            if (odomQueue.front().header.stamp.toSec() < timeScanCur - 0.2)
                 odomQueue.pop_front();
             else
                 break;
@@ -417,7 +442,7 @@ public:
 
         if (odomQueue.back().header.stamp.toSec() < timeScanEnd)
             return;
-
+        std::cout<<odomQueue.size()<<std::endl;
         nav_msgs::Odometry endOdomMsg;
 
         for (int i = 0; i < (int)odomQueue.size(); ++i)
@@ -492,10 +517,11 @@ public:
 
     PointType deskewPoint(PointType *point, double relTime)
     {
+        
         if (deskewFlag == -1 || cloudInfo.imuAvailable == false)
             return *point;
-
-        double pointTime = timeScanCur + relTime;
+        //std::cout<<setprecision(12)<< "timeScanCur"<<timeScanCur<<"relTime"<<relTime<<std::endl;
+        double pointTime = relTime*1e-9;
 
         float rotXCur, rotYCur, rotZCur;
         findRotation(pointTime, &rotXCur, &rotYCur, &rotZCur);
@@ -533,8 +559,8 @@ public:
             thisPoint.y = laserCloudIn->points[i].y;
             thisPoint.z = laserCloudIn->points[i].z;
             thisPoint.intensity = laserCloudIn->points[i].intensity;
-
-            float range = pointDistance(thisPoint);
+        
+            float range = pointDistance(thisPoint); 
             if (range < lidarMinRange || range > lidarMaxRange)
                 continue;
 
@@ -557,13 +583,14 @@ public:
 
             if (rangeMat.at<float>(rowIdn, columnIdn) != FLT_MAX)
                 continue;
+            if (laserCloudIn->points[i].timestamp) {
+              thisPoint = deskewPoint(&thisPoint, laserCloudIn->points[i].timestamp);
 
-            thisPoint = deskewPoint(&thisPoint, laserCloudIn->points[i].time);
+              rangeMat.at<float>(rowIdn, columnIdn) = range;
 
-            rangeMat.at<float>(rowIdn, columnIdn) = range;
-
-            int index = columnIdn + rowIdn * Horizon_SCAN;
-            fullCloud->points[index] = thisPoint;
+              int index = columnIdn + rowIdn * Horizon_SCAN;
+              fullCloud->points[index] = thisPoint;
+            }
         }
     }
 

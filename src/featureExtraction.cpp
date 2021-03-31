@@ -85,7 +85,7 @@ public:
         {
             float diffRange = cloudInfo.pointRange[i-5] + cloudInfo.pointRange[i-4]
                             + cloudInfo.pointRange[i-3] + cloudInfo.pointRange[i-2]
-                            + cloudInfo.pointRange[i-1] - cloudInfo.pointRange[i] * 10
+                            + cloudInfo.pointRange[i-1] - cloudInfo.pointRange[i] * 1
                             + cloudInfo.pointRange[i+1] + cloudInfo.pointRange[i+2]
                             + cloudInfo.pointRange[i+3] + cloudInfo.pointRange[i+4]
                             + cloudInfo.pointRange[i+5];            

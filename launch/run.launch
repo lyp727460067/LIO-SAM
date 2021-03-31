@@ -2,6 +2,7 @@
 
     <arg name="project" default="lio_sam"/>
     
+  <node pkg="tf" type="static_transform_publisher" name="lidar2base_publisher" args="0 0 0 0 0 0 base_link  laser_link 10" />
     <!-- Parameters -->
     <rosparam file="$(find lio_sam)/config/params_lp.yaml" command="load" />
 

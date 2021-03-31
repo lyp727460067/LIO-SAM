@@ -25,6 +25,10 @@ sensor_msgs::Imu last_imu_data;
 Eigen::Quaterniond orientation_ = Eigen::Quaterniond::Identity();
 double imu_gravity_time_constant_ = 10;
 Eigen::Vector3d gravity_vector_ = Eigen::Vector3d::UnitZ();
+Eigen::Vector3d gra_bias_ = Eigen::Vector3d::Zero();
+Eigen::Vector3d gry_bias_ = Eigen::Vector3d::Zero();
+Eigen::Vector3d gry_sum_ = Eigen::Vector3d::Zero();
+Eigen::Vector3d gra_sum_ = Eigen::Vector3d::Zero();
 
 ros::Publisher imu_pub ;
 int init_start= 0;
@@ -34,6 +38,7 @@ Eigen::Quaterniond FromTwoVectors(const Eigen::Vector3d& a,
 }
   void imu_callback(sensor_msgs::Imu::ConstPtr msg) {
     static  bool is_first  =true;
+    static bool is_init = false;
     if (is_first) {
       last_imu_data = *msg;
       is_first = false;
@@ -50,21 +55,38 @@ Eigen::Quaterniond FromTwoVectors(const Eigen::Vector3d& a,
     imu.linear_acceleration.z = -imu.linear_acceleration.y;
     imu.linear_acceleration.y = -temp;
 
+
+
+
+
     const double delta_t =
-        last_imu_data.header.stamp.toSec() - msg->header.stamp.toSec();
+       msg->header.stamp.toSec()-  last_imu_data.header.stamp.toSec();
     Eigen::Vector3d imu_linear_acceleration;
     Eigen::Vector3d imu_angular_velocity;
 
+    imu_angular_velocity.x() = imu.angular_velocity.x - gry_bias_.x();
+    imu_angular_velocity.y() = imu.angular_velocity.y - gry_bias_.y();
+    imu_angular_velocity.z() = imu.angular_velocity.z - gry_bias_.z();
 
-    imu_angular_velocity.x() =imu.angular_velocity.x;
-    imu_angular_velocity.y() =imu.angular_velocity.y;
-    imu_angular_velocity.z() =imu.angular_velocity.z;
+    imu_linear_acceleration.x() = imu.linear_acceleration.x - gra_bias_.x();
+    imu_linear_acceleration.y() = imu.linear_acceleration.y - gra_bias_.y();
+    imu_linear_acceleration.z() = imu.linear_acceleration.z - gra_bias_.z();
+    static int init_cout = 0;
+    if (!is_init) {
+      gry_sum_ += imu_angular_velocity;
+      gra_sum_ += imu_linear_acceleration;
+      init_cout++;
+      if (init_cout >= 4096) {
+        is_init = true;
+        gry_bias_ = gry_sum_ / 4096;
+        gra_bias_ = gra_sum_ / 4096;
+        gra_bias_.z() = gra_bias_.z() - 9.8;
+      } else {
+        return;
+      }
+    }
 
-    imu_linear_acceleration.x() =imu.linear_acceleration.x;
-    imu_linear_acceleration.y() =imu.linear_acceleration.y;
-    imu_linear_acceleration.z() =imu.linear_acceleration.z;
-
-    const double alpha = 0.8;//1. - std::exp(-delta_t / imu_gravity_time_constant_);
+    const double alpha = 1. - std::exp(-delta_t / imu_gravity_time_constant_);
     gravity_vector_ =
         (1. - alpha) * gravity_vector_ + alpha * imu_linear_acceleration;
 
@@ -80,6 +102,13 @@ Eigen::Quaterniond FromTwoVectors(const Eigen::Vector3d& a,
 
 
     last_imu_data = imu;
+    imu.angular_velocity.x  = imu_angular_velocity.x();
+    imu.angular_velocity.y  = imu_angular_velocity.y();
+    imu.angular_velocity.z  = imu_angular_velocity.z();
+    
+    imu.linear_acceleration.x   = imu_linear_acceleration.x();
+    imu.linear_acceleration.y   = imu_linear_acceleration.y();
+    imu.linear_acceleration.z   = imu_linear_acceleration.z();
     imu.orientation.w = orientation_.w(); 
     imu.orientation.x = orientation_.x(); 
     imu.orientation.y = orientation_.y(); 
@@ -96,6 +125,7 @@ Eigen::Quaterniond FromTwoVectors(const Eigen::Vector3d& a,
   int main(int argc, char** argv) {
    
     ros::init(argc,argv,"realsen_imutoimu");
+
     ros::NodeHandle nh("");
     imu_pub= nh.advertise<sensor_msgs::Imu>("imu_topic",1);
     ros::Subscriber imu_sub = nh.subscribe<sensor_msgs::Imu>("/camera/imu",1,imu_callback);

@@ -250,7 +250,7 @@ public:
     void odometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg)
     {
         std::lock_guard<std::mutex> lock(mtx);
-
+        std::cout<<"odometryHandler"<<std::endl;
         double currentCorrectionTime = ROS_TIME(odomMsg);
 
         // make sure we have imu data to integrate
@@ -265,11 +265,12 @@ public:
         float r_z = odomMsg->pose.pose.orientation.z;
         float r_w = odomMsg->pose.pose.orientation.w;
         bool degenerate = (int)odomMsg->pose.covariance[0] == 1 ? true : false;
+;
         gtsam::Pose3 lidarPose = gtsam::Pose3(gtsam::Rot3::Quaternion(r_w, r_x, r_y, r_z), gtsam::Point3(p_x, p_y, p_z));
-
+        std::cout<<"lidarPose"<<lidarPose<<endl;
 
         // 0. initialize system
-        if (systemInitialized == false)
+        if(systemInitialized == false)
         {
             resetOptimization();
 
@@ -284,6 +285,7 @@ public:
                 else
                     break;
             }
+
             // initial pose
             prevPose_ = lidarPose.compose(lidar2Imu);
             gtsam::PriorFactor<gtsam::Pose3> priorPose(X(0), prevPose_, priorPoseNoise);
@@ -340,11 +342,14 @@ public:
             optimizer.update(graphFactors, graphValues);
             graphFactors.resize(0);
             graphValues.clear();
-
+            
             key = 1;
+            std::cout<<"resetOptimization"<<std::endl;
+            
         }
 
-
+        std::cout<<"key="<<key<<std::endl;
+        std::cout<<"imuQop.size()"<<imuQueOpt.size()<<std::endl;
         // 1. integrate imu data and optimize
         while (!imuQueOpt.empty())
         {
@@ -354,6 +359,14 @@ public:
             if (imuTime < currentCorrectionTime - delta_t)
             {
                 double dt = (lastImuT_opt < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_opt);
+                 dt=0.0024;
+                // std::cout<<"dt="<<dt<<std::endl;
+                // std::cout<<"thisImu->linear_acceleration.x"<<thisImu->linear_acceleration.x<<"\n"<<
+                // "thisImu->linear_acceleration.y"<<thisImu->linear_acceleration.y<<"\n"<<
+                // "thisImu->linear_acceleration.z"<<thisImu->linear_acceleration.z<<"\n"<<
+                // "thisImu->angular_velocity.x"<<thisImu->angular_velocity.x<<"\n"<<
+                // "thisImu->angular_velocity.y"<<thisImu->angular_velocity.y<<"\n"<<
+                // "thisImu->angular_velocity.z"<<thisImu->angular_velocity.z<<std::endl;
                 imuIntegratorOpt_->integrateMeasurement(
                         gtsam::Vector3(thisImu->linear_acceleration.x, thisImu->linear_acceleration.y, thisImu->linear_acceleration.z),
                         gtsam::Vector3(thisImu->angular_velocity.x,    thisImu->angular_velocity.y,    thisImu->angular_velocity.z), dt);
@@ -364,6 +377,10 @@ public:
             else
                 break;
         }
+        std::cout<<setprecision(18);
+        std::cout<<"imuQueOpt.front.time="<<imuQueOpt.front().header.stamp.toSec();
+        std::cout<<"currntCorrectionTime="<<currentCorrectionTime<<std::endl;
+        std::cout<<"add imu factor to graph"<<std::endl;
         // add imu factor to graph
         const gtsam::PreintegratedImuMeasurements& preint_imu = dynamic_cast<const gtsam::PreintegratedImuMeasurements&>(*imuIntegratorOpt_);
         gtsam::ImuFactor imu_factor(X(key - 1), V(key - 1), X(key), V(key), B(key - 1), preint_imu);
@@ -379,10 +396,13 @@ public:
         gtsam::NavState propState_ = imuIntegratorOpt_->predict(prevState_, prevBias_);
         graphValues.insert(X(key), propState_.pose());
         graphValues.insert(V(key), propState_.v());
+        std::cout<<"prevBias_"<<prevBias_<<std::endl;
         graphValues.insert(B(key), prevBias_);
         // optimize
+        std::cout<<"optimize"<<std::endl;
         optimizer.update(graphFactors, graphValues);
         optimizer.update();
+        std::cout<<"update"<<std::endl;
         graphFactors.resize(0);
         graphValues.clear();
         // Overwrite the beginning of the preintegration for the next step.
@@ -431,6 +451,8 @@ public:
 
         ++key;
         doneFirstOpt = true;
+
+        std::cout<<"odometryHandler done"<<std::endl;
     }
 
     bool failureDetection(const gtsam::Vector3& velCur, const gtsam::imuBias::ConstantBias& biasCur)
@@ -468,7 +490,6 @@ public:
         double imuTime = ROS_TIME(&thisImu);
         double dt = (lastImuT_imu < 0) ? (1.0 / 500.0) : (imuTime - lastImuT_imu);
         lastImuT_imu = imuTime;
-
         // integrate this single imu message
         imuIntegratorImu_->integrateMeasurement(gtsam::Vector3(thisImu.linear_acceleration.x, thisImu.linear_acceleration.y, thisImu.linear_acceleration.z),
                                                 gtsam::Vector3(thisImu.angular_velocity.x,    thisImu.angular_velocity.y,    thisImu.angular_velocity.z), dt);
